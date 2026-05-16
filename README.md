@@ -1,6 +1,6 @@
 # indexer
 
-`indexer` is a small public Go package for Ethereum log indexing.
+`indexer` is a small Go package for indexing Ethereum logs.
 
 ```go
 idx, err := indexer.New(client, handler,

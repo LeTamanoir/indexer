@@ -1,5 +1,5 @@
-// Package indexer provides a small Ethereum log indexer for applications that
-// want to own their indexed state and storage policy.
+// Package indexer provides tools for indexing Ethereum logs while letting
+// applications own their indexed state and storage policy.
 //
 // The package does not subscribe to new heads. Callers provide headers with
 // SyncTo or explicit ranges with SyncRange.
