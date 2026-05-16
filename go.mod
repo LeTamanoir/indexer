@@ -1,4 +1,4 @@
-module github.com/tamanoir/indexer
+module github.com/letamanoir/indexer
 
 go 1.26.0
 
