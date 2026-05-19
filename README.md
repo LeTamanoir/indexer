@@ -1,41 +1,15 @@
-# indexer
+# go-exex
 
-`indexer` is a small Go package for indexing Ethereum logs.
+`go-exex` defines small ExEx-style primitives for Ethereum indexers.
 
 ```go
-idx, err := indexer.New(client, handler, indexer.Config{
-	StartBlock:         18_000_000,
-	BatchSize:          2_000,
-	CheckpointInterval: 10_000,
-	Checkpoints:        indexer.FileCheckpoints(".cache/aave"),
-	LogCache:           indexer.FileLogCache(".cache/aave"),
-	Logger:             logger,
-})
-if err != nil {
-	return err
-}
-
-if err := idx.SyncTo(ctx, head); err != nil {
-	return err
+type ExExHandler interface {
+	HandleNotification(ctx context.Context, notification exex.ExExNotification) error
 }
 ```
 
-Handlers provide a full `ethereum.FilterQuery` and receive sorted logs grouped
-by block:
+The notification model mirrors Reth's execution-extension shape:
 
-```go
-type Handler interface {
-	Filter() ethereum.FilterQuery
-	HandleLogs(ctx context.Context, logs []types.Log) error
-}
-```
-
-Checkpoint and log-cache storage are optional. The default writes nothing to
-disk. Automatic reorg recovery requires checkpointing or a handler that
-implements:
-
-```go
-type Resetter interface {
-	Reset()
-}
-```
+- `ChainCommitted` carries a new canonical chain segment.
+- `ChainReorged` carries the old and new chain segments.
+- `ChainReverted` carries an old chain segment that was rolled back.
