@@ -2,7 +2,9 @@ package exex
 
 import (
 	"context"
+	"errors"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -21,6 +23,19 @@ const (
 	ChainReverted
 )
 
+func (k ExExNotificationKind) String() string {
+	switch k {
+	case ChainCommitted:
+		return "committed"
+	case ChainReorged:
+		return "reorged"
+	case ChainReverted:
+		return "reverted"
+	default:
+		return "unknown"
+	}
+}
+
 // ExExNotification describes a canonical-chain transition.
 //
 // ChainCommitted carries only the new chain, ChainReverted carries only the
@@ -29,6 +44,17 @@ type ExExNotification struct {
 	Kind ExExNotificationKind
 	Old  Chain
 	New  Chain
+}
+
+// ChainHandler applies committed chain segments and reverts old chain segments.
+type ChainHandler interface {
+	CommitChain(ctx context.Context, chain Chain) error
+	RevertChain(ctx context.Context, chain Chain) error
+}
+
+// NewExExHandler adapts a ChainHandler into an ExExHandler.
+func NewExExHandler(handler ChainHandler) ExExHandler {
+	return chainHandlerAdapter{handler: handler}
 }
 
 // NewChainCommitted creates a notification for a canonical chain extension.
@@ -67,6 +93,39 @@ func (n ExExNotification) RevertedChain() (Chain, bool) {
 	}
 }
 
+// Apply dispatches reverted and committed chain segments to handler.
+func (n ExExNotification) Apply(ctx context.Context, handler ChainHandler) error {
+	if handler == nil {
+		return errors.New("exex: nil chain handler")
+	}
+
+	if reverted, ok := n.RevertedChain(); ok {
+		if err := handler.RevertChain(ctx, reverted); err != nil {
+			return err
+		}
+	}
+
+	if committed, ok := n.CommittedChain(); ok {
+		if err := handler.CommitChain(ctx, committed); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// LogCount returns the number of logs carried by the notification.
+func (n ExExNotification) LogCount() int {
+	count := 0
+	if reverted, ok := n.RevertedChain(); ok {
+		count += reverted.LogCount()
+	}
+	if committed, ok := n.CommittedChain(); ok {
+		count += committed.LogCount()
+	}
+	return count
+}
+
 // Inverted returns the opposite transition.
 func (n ExExNotification) Inverted() ExExNotification {
 	switch n.Kind {
@@ -103,8 +162,45 @@ func (c Chain) Tip() uint64 {
 	return c.ToBlock
 }
 
+// ForEachLog calls fn for each log in the chain.
+func (c Chain) ForEachLog(ctx context.Context, fn func(block BlockLogs, log types.Log) error) error {
+	if fn == nil {
+		return errors.New("exex: nil log handler")
+	}
+
+	for _, block := range c.Blocks {
+		for _, log := range block.Logs {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := fn(block, log); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// LogCount returns the number of logs carried by the chain.
+func (c Chain) LogCount() int {
+	count := 0
+	for _, block := range c.Blocks {
+		count += len(block.Logs)
+	}
+	return count
+}
+
 // BlockLogs contains the logs for one block.
 type BlockLogs struct {
 	Number uint64
+	Hash   common.Hash
 	Logs   []types.Log
+}
+
+type chainHandlerAdapter struct {
+	handler ChainHandler
+}
+
+func (h chainHandlerAdapter) HandleNotification(ctx context.Context, notification ExExNotification) error {
+	return notification.Apply(ctx, h.handler)
 }

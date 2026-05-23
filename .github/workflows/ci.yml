@@ -20,10 +20,12 @@ jobs:
           cache: true
 
       - name: Format
-        run: make fmt-check
+        run: |
+          files="$(gofmt -l .)"
+          test -z "$files" || { printf '%s\n' "$files"; exit 1; }
 
       - name: Vet
-        run: make vet
+        run: go vet ./...
 
       - name: Test
-        run: make test
+        run: go test ./...
